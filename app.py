@@ -16,6 +16,9 @@ except ImportError:
 
 app = Flask(__name__)
 
+# Ensure static folder exists (needed on Render)
+os.makedirs('static', exist_ok=True)
+
 # ==========================
 # 🔐 CONFIGURE GROQ API
 # ==========================
