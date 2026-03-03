@@ -16,8 +16,10 @@ except ImportError:
 
 app = Flask(__name__)
 
-# Ensure static folder exists (needed on Render)
-os.makedirs('static', exist_ok=True)
+# Ensure static folder exists using absolute path (needed on Render)
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+os.makedirs(STATIC_DIR, exist_ok=True)
+CHART_PATH = os.path.join(STATIC_DIR, 'profit_chart.png')
 
 # ==========================
 # 🔐 CONFIGURE GROQ API
@@ -110,7 +112,7 @@ def generate_profit_chart(simulation_data):
     ax2.set_xticks(months)
 
     plt.tight_layout(pad=3)
-    plt.savefig("static/profit_chart.png", dpi=150, bbox_inches='tight', facecolor='#0d1117')
+    plt.savefig(CHART_PATH, dpi=150, bbox_inches='tight', facecolor='#0d1117')
     plt.close()
 
 
