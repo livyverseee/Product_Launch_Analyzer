@@ -1,44 +1,63 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from groq import Groq
-import os
-import json
+import os, json, io, base64
+from datetime import datetime
+from functools import wraps
 
-# Load .env file if present
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
+# Flask-Login & DB
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "producttwin-secret-2024")
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///users.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Ensure static folder exists using absolute path (needed on Render)
-STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-os.makedirs(STATIC_DIR, exist_ok=True)
-CHART_PATH = os.path.join(STATIC_DIR, 'profit_chart.png')
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Please log in to access ProductTwin."
 
-# ==========================
-# 🔐 CONFIGURE GROQ API
-# ==========================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-if not GROQ_API_KEY:
-    print("WARNING: GROQ_API_KEY not set. Add it to your .env file.")
 groq_client = Groq(api_key=GROQ_API_KEY)
+
+# ==========================
+# 👤 USER MODEL
+# ==========================
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+with app.app_context():
+    db.create_all()
 
 # ==========================
 # 📊 DIGITAL TWIN SIMULATION
 # ==========================
 def simulate_digital_twin(price, demand, competition, budget, scenario):
-    # Normalize inputs to a base unit scale (independent of raw values)
-    base_units = 100  # start with 100 base units sold per month
+    base_units = 100
     cost_per_unit = price * 0.38
     monthly_marketing_cost = budget / 12
+    demand_boost = 1.0
 
-    # Scenario multipliers
     if scenario == "aggressive_marketing":
         budget *= 1.5
         monthly_marketing_cost = budget / 12
@@ -47,105 +66,80 @@ def simulate_digital_twin(price, demand, competition, budget, scenario):
         price *= 0.85
         cost_per_unit = price * 0.38
         demand_boost = 1.3
-    else:
-        demand_boost = 1.0
+    elif scenario == "market_expansion":
+        demand_boost = 1.15
+        monthly_marketing_cost = budget / 12 * 0.9
+    elif scenario == "lean_launch":
+        monthly_marketing_cost = budget / 12 * 0.5
+        demand_boost = 0.85
+    elif scenario == "viral_growth":
+        demand_boost = 1.4
+        monthly_marketing_cost = budget / 12 * 1.1
 
-    # Demand attractiveness (0.3 to 1.0)
-    demand_factor = 0.3 + (demand / 100) * 0.7
-
-    # Competition resistance (high competition = fewer units)
-    competition_resistance = 1 - (competition / 100) * 0.6
-
-    # Marketing power (how much budget boosts units)
+    demand_factor = 0.3 + (max(20.0, demand) / 100) * 0.7
+    competition_resistance = 1 - (max(20.0, competition) / 100) * 0.6
     marketing_power = min(2.0, 1 + (budget / 500000))
 
     simulation = []
-
     for month in range(1, 13):
-        # S-curve growth: slow start, accelerates mid, plateaus late
-        # Uses logistic-style growth
-        growth_multiplier = 1 + (month / 12) * 1.8  # grows from 1x to 2.8x
-
-        # Word of mouth accelerates from month 3
-        wom = 1.0 + max(0, (month - 2) * 0.08)
-        wom = min(wom, 2.2)
-
-        # Seasonality
+        growth_multiplier = 1 + (month / 12) * 1.8
+        wom = min(1.0 + max(0, (month - 2) * 0.08), 2.2)
         seasonality = 1 + 0.1 * np.sin(month * np.pi / 6)
-
-        # Units sold — always grows with time
-        units_sold = (
-            base_units
-            * demand_factor
-            * demand_boost
-            * competition_resistance
-            * marketing_power
-            * growth_multiplier
-            * wom
-            * seasonality
-        )
-
+        units_sold = (base_units * demand_factor * demand_boost *
+                      competition_resistance * marketing_power *
+                      growth_multiplier * wom * seasonality)
         revenue = units_sold * price
         production_cost = units_sold * cost_per_unit
         profit = revenue - production_cost - monthly_marketing_cost
-
         simulation.append({
             "month": month,
             "profit": round(profit, 2),
             "revenue": round(revenue, 2),
             "units_sold": round(units_sold, 1),
         })
-
     return simulation
 
-
 # ==========================
-# 📈 GENERATE PROFIT CHART
+# 📈 GENERATE CHART (base64)
 # ==========================
 def generate_profit_chart(simulation_data):
-    import io, base64
-
     months = [d["month"] for d in simulation_data]
     profits = [d["profit"] for d in simulation_data]
     revenues = [d["revenue"] for d in simulation_data]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    fig.patch.set_facecolor('#0d1117')
+    fig.patch.set_facecolor('#0a0f1e')
 
     for ax in [ax1, ax2]:
-        ax.set_facecolor('#161b22')
+        ax.set_facecolor('#111827')
         for spine in ax.spines.values():
-            spine.set_color('#30363d')
-        ax.tick_params(colors='#8b949e')
-        ax.yaxis.label.set_color('#8b949e')
-        ax.xaxis.label.set_color('#8b949e')
-        ax.title.set_color('#e6edf3')
+            spine.set_color('#1f2937')
+        ax.tick_params(colors='#9ca3af')
+        ax.yaxis.label.set_color('#9ca3af')
+        ax.xaxis.label.set_color('#9ca3af')
+        ax.title.set_color('#f1f5f9')
 
-    profit_colors = ['#3fb950' if p > 0 else '#f85149' for p in profits]
-    ax1.bar(months, profits, color=profit_colors, alpha=0.85, width=0.7)
-    ax1.axhline(y=0, color='#484f58', linestyle='--', linewidth=1)
+    profit_colors = ['#10b981' if p > 0 else '#ef4444' for p in profits]
+    bars = ax1.bar(months, profits, color=profit_colors, alpha=0.9, width=0.7)
+    ax1.axhline(y=0, color='#374151', linestyle='--', linewidth=1)
     ax1.set_xlabel("Month")
     ax1.set_ylabel("Profit (₹)")
-    ax1.set_title("12-Month Profit Forecast")
+    ax1.set_title("12-Month Profit Forecast", fontweight='bold', pad=15)
     ax1.set_xticks(months)
 
-    ax2.fill_between(months, revenues, alpha=0.2, color='#58a6ff')
-    ax2.plot(months, revenues, color='#58a6ff', linewidth=2.5, marker='o', markersize=5)
+    ax2.fill_between(months, revenues, alpha=0.15, color='#6366f1')
+    ax2.plot(months, revenues, color='#6366f1', linewidth=2.5, marker='o', markersize=6)
     ax2.set_xlabel("Month")
     ax2.set_ylabel("Revenue (₹)")
-    ax2.set_title("12-Month Revenue Trend")
+    ax2.set_title("12-Month Revenue Trend", fontweight='bold', pad=15)
     ax2.set_xticks(months)
 
     plt.tight_layout(pad=3)
-
-    # Save to memory buffer instead of file — no caching issues!
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='#0d1117')
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='#0a0f1e')
     plt.close()
     buf.seek(0)
-    chart_b64 = base64.b64encode(buf.read()).decode('utf-8')
-    return chart_b64
-
+    return base64.b64encode(buf.read()).decode('utf-8')
 
 # ==========================
 # 🤖 GROQ AI STRATEGY
@@ -156,77 +150,114 @@ def generate_ai_strategy(product, price, demand, competition, budget, score, ris
         avg_profit = sum(d["profit"] for d in simulation) / len(simulation)
         profitable_months = sum(1 for d in simulation if d["profit"] > 0)
 
-        prompt = f"""You are an elite startup advisor and go-to-market strategist based in India.
-
-Analyze this product launch data and provide actionable strategic advice in Indian market context:
+        prompt = f"""You are an elite startup advisor for the Indian market.
 
 Product: {product}
-Pricing: ₹{price}
-Market Demand Score: {demand}/100
-Competition Intensity: {competition}/100
-Monthly Marketing Budget: ₹{budget}
-Success Score: {score}/100
-Risk Classification: {risk}
+Price: ₹{price} | Demand Score: {demand}/100 | Competition: {competition}/100
+Marketing Budget: ₹{budget}/month | Success Score: {score}/100 | Risk: {risk}
 
-Digital Twin Simulation Results (12-month forecast):
+Digital Twin Simulation (12-month):
 - Peak Monthly Profit: ₹{peak_profit:,.0f}
-- Average Monthly Profit: ₹{avg_profit:,.0f}
+- Avg Monthly Profit: ₹{avg_profit:,.0f}
 - Profitable Months: {profitable_months}/12
 
-Respond ONLY with this JSON object, no markdown, no extra text:
+Respond ONLY with this JSON (no markdown):
 {{
-  "summary": "2-sentence executive summary of the opportunity",
+  "summary": "2-sentence executive summary",
+  "ai_insight": "1 surprising insight the founder might not have considered",
   "top_risks": ["risk 1", "risk 2", "risk 3"],
-  "quick_wins": ["action 1 (do this week)", "action 2 (do this week)", "action 3 (do this week)"],
+  "quick_wins": ["action 1", "action 2", "action 3"],
   "90_day_plan": ["Month 1: ...", "Month 2: ...", "Month 3: ..."],
-  "pricing_advice": "specific pricing strategy recommendation in Indian Rupees",
-  "marketing_advice": "specific Indian marketing channel and budget allocation advice",
-  "competitive_moat": "how to build defensibility against competition in Indian market"
+  "pricing_advice": "specific ₹ pricing strategy",
+  "marketing_advice": "specific Indian channel + budget split advice",
+  "competitive_moat": "how to build defensibility in Indian market",
+  "digital_twin_interpretation": "what the simulation numbers mean for this specific product"
 }}"""
 
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a startup business strategist. Always respond with valid JSON only, no extra text."},
+                {"role": "system", "content": "You are a startup strategist. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=1000,
+            max_tokens=1200,
         )
-
-        raw = response.choices[0].message.content.strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
         return json.loads(raw)
-
     except Exception as e:
-        print("Groq API ERROR:", e)
+        print("Groq ERROR:", e)
         return {
-            "summary": f"API Error: {str(e)[:120]}",
-            "top_risks": ["Check GROQ_API_KEY in .env", "Ensure groq package is installed", "Verify API key at console.groq.com"],
-            "quick_wins": ["pip install groq", "Add GROQ_API_KEY=gsk_... to .env", "Restart Flask server"],
-            "90_day_plan": ["Month 1: Fix API connection", "Month 2: Rerun analysis", "Month 3: Execute strategy"],
-            "pricing_advice": "Fix API key to get pricing recommendations.",
-            "marketing_advice": "Fix API key to get marketing recommendations.",
-            "competitive_moat": "Fix API key to get competitive analysis."
+            "summary": f"Error: {str(e)[:100]}",
+            "ai_insight": "Fix API key to get insights.",
+            "top_risks": ["API issue"], "quick_wins": ["Fix API"],
+            "90_day_plan": ["Fix API"], "pricing_advice": "N/A",
+            "marketing_advice": "N/A", "competitive_moat": "N/A",
+            "digital_twin_interpretation": "N/A"
         }
 
+# ==========================
+# 🔐 AUTH ROUTES
+# ==========================
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user, remember=True)
+            return redirect(url_for("home"))
+        flash("Invalid email or password.")
+    return render_template("login.html")
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+        if not name or not email or not password:
+            flash("All fields are required.")
+        elif password != confirm:
+            flash("Passwords do not match.")
+        elif User.query.filter_by(email=email).first():
+            flash("Email already registered.")
+        else:
+            user = User(name=name, email=email, password=generate_password_hash(password))
+            db.session.add(user)
+            db.session.commit()
+            login_user(user)
+            return redirect(url_for("home"))
+    return render_template("register.html")
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
 
 # ==========================
-# 🏠 ROUTES
+# 🏠 MAIN ROUTES
 # ==========================
 @app.route("/")
+@login_required
 def home():
-    return render_template("index.html")
-
+    return render_template("index.html", user=current_user)
 
 @app.route("/analyze", methods=["POST"])
+@login_required
 def analyze():
     product = request.form["product"]
     price = float(request.form["price"])
     demand = max(20.0, float(request.form.get("demand", 60)))
     competition = max(20.0, float(request.form.get("competition", 50)))
     budget = float(request.form["budget"])
-    print(f"DEBUG: price={price}, demand={demand}, competition={competition}, budget={budget}")
     scenario = request.form["scenario"]
 
     price_score = min(100, max(0, 100 - (price / 1000)))
@@ -234,27 +265,15 @@ def analyze():
     competition_score = 100 - competition
     budget_score = min(100, budget / 50000)
 
-    score = round(
-        demand_score * 0.35 +
-        competition_score * 0.30 +
-        budget_score * 0.20 +
-        price_score * 0.15,
-        1
-    )
+    score = round(demand_score*0.35 + competition_score*0.30 + budget_score*0.20 + price_score*0.15, 1)
     score = max(0, min(100, score))
 
     if score >= 72:
-        risk = "Low Risk"
-        market_fit = "Excellent"
-        risk_color = "green"
+        risk, market_fit, risk_color = "Low Risk", "Excellent", "green"
     elif score >= 50:
-        risk = "Medium Risk"
-        market_fit = "Good"
-        risk_color = "yellow"
+        risk, market_fit, risk_color = "Medium Risk", "Good", "yellow"
     else:
-        risk = "High Risk"
-        market_fit = "Needs Work"
-        risk_color = "red"
+        risk, market_fit, risk_color = "High Risk", "Needs Work", "red"
 
     simulation = simulate_digital_twin(price, demand, competition, budget, scenario)
     chart_b64 = generate_profit_chart(simulation)
@@ -266,23 +285,19 @@ def analyze():
 
     strategy = generate_ai_strategy(product, price, demand, competition, budget, score, risk, simulation)
 
-    return render_template(
-        "result.html",
-        product=product,
-        score=score,
-        risk=risk,
-        risk_color=risk_color,
-        market_fit=market_fit,
+    return render_template("result.html",
+        user=current_user,
+        product=product, score=score, risk=risk,
+        risk_color=risk_color, market_fit=market_fit,
         peak_profit=f"{peak_profit:,.0f}",
         total_revenue=f"{total_revenue:,.0f}",
         profitable_months=profitable_months,
         final_profit=f"{final_profit:,.0f}",
-        strategy=strategy,
-        simulation=simulation[:6],
+        strategy=strategy, simulation=simulation[:6],
         scenario=scenario.replace("_", " ").title(),
-        chart_b64=chart_b64
+        chart_b64=chart_b64,
+        price=price, demand=demand, competition=competition, budget=budget
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProductTwin — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0f1e;
+  --surface: #111827;
+  --surface2: #1a2235;
+  --border: #1f2937;
+  --accent: #6366f1;
+  --accent2: #06b6d4;
+  --green: #10b981;
+  --text: #f1f5f9;
+  --muted: #6b7280;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  font-family: 'Cabinet Grotesk', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+/* Animated background */
+.bg-animation {
+  position: fixed; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, rgba(6,182,212,0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 60% 80%, rgba(16,185,129,0.05) 0%, transparent 50%);
+}
+.grid-bg {
+  position: fixed; inset: 0; z-index: 0;
+  background-image: linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+/* Floating particles */
+.particle {
+  position: fixed;
+  width: 3px; height: 3px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: float linear infinite;
+  opacity: 0;
+}
+@keyframes float {
+  0% { transform: translateY(100vh) translateX(0); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.6; }
+  100% { transform: translateY(-100px) translateX(30px); opacity: 0; }
+}
+.wrapper {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 900px;
+  min-height: 560px;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.2), 0 40px 80px rgba(0,0,0,0.5);
+  animation: slideUp 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Left panel */
+.left-panel {
+  background: linear-gradient(145deg, #0f172a, #1a1040);
+  padding: 60px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+.left-panel::before {
+  content: '';
+  position: absolute;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(99,102,241,0.2), transparent 70%);
+  top: -100px; left: -100px;
+  border-radius: 50%;
+}
+.left-panel::after {
+  content: '';
+  position: absolute;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(6,182,212,0.15), transparent 70%);
+  bottom: -50px; right: -50px;
+  border-radius: 50%;
+}
+.brand {
+  position: relative; z-index: 1;
+}
+.brand-icon {
+  width: 48px; height: 48px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+}
+.brand h2 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+.brand p {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.features {
+  position: relative; z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  font-size: 13px;
+  color: #cbd5e1;
+  animation: fadeInLeft 0.5s ease both;
+}
+.feature:nth-child(1) { animation-delay: 0.2s; }
+.feature:nth-child(2) { animation-delay: 0.35s; }
+.feature:nth-child(3) { animation-delay: 0.5s; }
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.feature-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.fi-blue { background: rgba(99,102,241,0.2); }
+.fi-cyan { background: rgba(6,182,212,0.2); }
+.fi-green { background: rgba(16,185,129,0.2); }
+/* Right panel */
+.right-panel {
+  background: var(--surface);
+  padding: 60px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.right-panel h3 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+.right-panel .sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 36px;
+}
+.flash-msg {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #fca5a5;
+  margin-bottom: 20px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.form-group input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 16px;
+  color: var(--text);
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-group input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+}
+.form-group input::placeholder { color: #374151; }
+.submit-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-family: 'Clash Display', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(99,102,241,0.4);
+}
+.submit-btn .shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.15) 50%, transparent 60%);
+  transform: translateX(-100%);
+  transition: transform 0.5s;
+}
+.submit-btn:hover .shimmer { transform: translateX(100%); }
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 20px 0;
+  font-size: 12px; color: var(--muted);
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1;
+  height: 1px; background: var(--border);
+}
+.switch-link {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.switch-link a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.switch-link a:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .wrapper { grid-template-columns: 1fr; width: 95%; }
+  .left-panel { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="bg-animation"></div>
+<div class="grid-bg"></div>
+
+<!-- Particles -->
+<script>
+  for(let i=0;i<12;i++){
+    const p=document.createElement('div');
+    p.className='particle';
+    p.style.cssText=`left:${Math.random()*100}%;animation-duration:${8+Math.random()*12}s;animation-delay:${Math.random()*8}s;background:${Math.random()>0.5?'#6366f1':'#06b6d4'};`;
+    document.body.appendChild(p);
+  }
+</script>
+
+<div class="wrapper">
+  <!-- Left branding panel -->
+  <div class="left-panel">
+    <div class="brand">
+      <div class="brand-icon">🚀</div>
+      <h2>ProductTwin</h2>
+      <p>AI-powered product launch intelligence for the Indian market.</p>
+    </div>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon fi-blue">🔬</div>
+        <div><strong>Digital Twin Engine</strong><br>12-month market simulation</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-cyan">🤖</div>
+        <div><strong>Groq Llama 3.3 AI</strong><br>Context-aware strategy</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-green">📊</div>
+        <div><strong>Risk Intelligence</strong><br>Multi-factor scoring</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right login form -->
+  <div class="right-panel">
+    <h3>Welcome back</h3>
+    <p class="sub">Sign in to your ProductTwin account</p>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-msg">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="you@example.com" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="submit-btn">
+        <div class="shimmer"></div>
+        Sign In →
+      </button>
+    </form>
+
+    <div class="divider">or</div>
+    <div class="switch-link">
+      Don't have an account? <a href="{{ url_for('register') }}">Create one free</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>
