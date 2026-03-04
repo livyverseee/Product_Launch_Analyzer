@@ -33,38 +33,61 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 # 📊 DIGITAL TWIN SIMULATION
 # ==========================
 def simulate_digital_twin(price, demand, competition, budget, scenario):
+    # Normalize inputs to a base unit scale (independent of raw values)
+    base_units = 100  # start with 100 base units sold per month
+    cost_per_unit = price * 0.38
+    monthly_marketing_cost = budget / 12
+
+    # Scenario multipliers
     if scenario == "aggressive_marketing":
         budget *= 1.5
-        demand *= 1.1
+        monthly_marketing_cost = budget / 12
+        demand_boost = 1.2
     elif scenario == "price_drop":
         price *= 0.85
-        demand *= 1.2
-    elif scenario == "market_expansion":
-        competition *= 0.8
-        budget *= 1.2
+        cost_per_unit = price * 0.38
+        demand_boost = 1.3
+    else:
+        demand_boost = 1.0
+
+    # Demand attractiveness (0.3 to 1.0)
+    demand_factor = 0.3 + (demand / 100) * 0.7
+
+    # Competition resistance (high competition = fewer units)
+    competition_resistance = 1 - (competition / 100) * 0.6
+
+    # Marketing power (how much budget boosts units)
+    marketing_power = min(2.0, 1 + (budget / 500000))
 
     simulation = []
-    current_demand = demand
-    cost_per_unit = price * 0.38
-    wom_growth = 1.0
 
     for month in range(1, 13):
-        market_saturation = 1 - (month / 30)
-        current_demand *= (1 + 0.03 * market_saturation)
-        competition_factor = max(0.3, (100 - competition) / 100 - (month * 0.005))
-        marketing_boost = (budget * 0.015) / (1 + month * 0.1)
+        # S-curve growth: slow start, accelerates mid, plateaus late
+        # Uses logistic-style growth
+        growth_multiplier = 1 + (month / 12) * 1.8  # grows from 1x to 2.8x
 
-        if month > 3:
-            wom_growth = min(1.5, wom_growth * 1.05)
+        # Word of mouth accelerates from month 3
+        wom = 1.0 + max(0, (month - 2) * 0.08)
+        wom = min(wom, 2.2)
 
+        # Seasonality
         seasonality = 1 + 0.1 * np.sin(month * np.pi / 6)
-        effective_demand = (current_demand + marketing_boost) * competition_factor * wom_growth * seasonality
-        units_sold = max(0, effective_demand * 0.09)
+
+        # Units sold — always grows with time
+        units_sold = (
+            base_units
+            * demand_factor
+            * demand_boost
+            * competition_resistance
+            * marketing_power
+            * growth_multiplier
+            * wom
+            * seasonality
+        )
 
         revenue = units_sold * price
         production_cost = units_sold * cost_per_unit
-        monthly_marketing = budget / 12
-        profit = revenue - production_cost - monthly_marketing
+        profit = revenue - production_cost - monthly_marketing_cost
 
         simulation.append({
             "month": month,
@@ -80,6 +103,8 @@ def simulate_digital_twin(price, demand, competition, budget, scenario):
 # 📈 GENERATE PROFIT CHART
 # ==========================
 def generate_profit_chart(simulation_data):
+    import io, base64
+
     months = [d["month"] for d in simulation_data]
     profits = [d["profit"] for d in simulation_data]
     revenues = [d["revenue"] for d in simulation_data]
@@ -112,8 +137,14 @@ def generate_profit_chart(simulation_data):
     ax2.set_xticks(months)
 
     plt.tight_layout(pad=3)
-    plt.savefig(CHART_PATH, dpi=150, bbox_inches='tight', facecolor='#0d1117')
+
+    # Save to memory buffer instead of file — no caching issues!
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='#0d1117')
     plt.close()
+    buf.seek(0)
+    chart_b64 = base64.b64encode(buf.read()).decode('utf-8')
+    return chart_b64
 
 
 # ==========================
@@ -192,9 +223,10 @@ def home():
 def analyze():
     product = request.form["product"]
     price = float(request.form["price"])
-    demand = float(request.form["demand"])
-    competition = float(request.form["competition"])
+    demand = max(20.0, float(request.form.get("demand", 60)))
+    competition = max(20.0, float(request.form.get("competition", 50)))
     budget = float(request.form["budget"])
+    print(f"DEBUG: price={price}, demand={demand}, competition={competition}, budget={budget}")
     scenario = request.form["scenario"]
 
     price_score = min(100, max(0, 100 - (price / 1000)))
@@ -225,7 +257,7 @@ def analyze():
         risk_color = "red"
 
     simulation = simulate_digital_twin(price, demand, competition, budget, scenario)
-    generate_profit_chart(simulation)
+    chart_b64 = generate_profit_chart(simulation)
 
     peak_profit = max(d["profit"] for d in simulation)
     total_revenue = sum(d["revenue"] for d in simulation)
@@ -247,7 +279,8 @@ def analyze():
         final_profit=f"{final_profit:,.0f}",
         strategy=strategy,
         simulation=simulation[:6],
-        scenario=scenario.replace("_", " ").title()
+        scenario=scenario.replace("_", " ").title(),
+        chart_b64=chart_b64
     )
 
 
