@@ -31,7 +31,6 @@ nav{position:relative;z-index:10;display:flex;align-items:center;justify-content
 .reveal:nth-child(6){animation-delay:0.6s;}
 /* TOP BAR */
 .top-bar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:36px;gap:16px;flex-wrap:wrap;}
-.product-info{}
 .label-mono{font-size:10px;letter-spacing:3px;color:var(--accent2);text-transform:uppercase;margin-bottom:6px;}
 .product-name{font-family:'Clash Display',sans-serif;font-size:2.2rem;font-weight:700;letter-spacing:-1px;line-height:1;}
 .scenario-tag{display:inline-block;margin-top:8px;font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:100px;color:var(--muted);}
@@ -137,7 +136,7 @@ tr:hover td{background:var(--surface2);}
           stroke-dasharray="{{ (score/100*326.73)|round(1) }} 326.73"/>
       </svg>
       <div class="score-text">
-        <span class="score-num" style="color:{% if risk_color=='green' %}#10b981{% elif risk_color=='yellow' %}#f59e0b{% else %}#ef4444{% endif %}">{{ score }}</span>
+        <span class="score-num score-num--{{ risk_color }}">{{ score }}</span>
         <span class="score-lbl">/ 100</span>
       </div>
     </div>
@@ -155,7 +154,7 @@ tr:hover td{background:var(--surface2);}
   <div class="metrics-grid reveal">
     <div class="metric">
       <div class="metric-icon">💰</div>
-      <div class="metric-val" style="color:{% if final_profit[0]=='-' %}var(--red){% else %}var(--green){% endif %}">₹{{ final_profit }}</div>
+      <div class="metric-val metric-val--{% if final_profit[0]=='-' %}negative{% else %}positive{% endif %}">₹{{ final_profit }}</div>
       <div class="metric-lbl">Month 12 Profit</div>
     </div>
     <div class="metric">
@@ -170,7 +169,7 @@ tr:hover td{background:var(--surface2);}
     </div>
     <div class="metric">
       <div class="metric-icon">✅</div>
-      <div class="metric-val" style="color:{% if profitable_months>=9 %}var(--green){% elif profitable_months>=6 %}var(--yellow){% else %}var(--red){% endif %}">{{ profitable_months }}/12</div>
+      <div class="metric-val {% if profitable_months>=9 %}metric-val--green{% elif profitable_months>=6 %}metric-val--yellow{% else %}metric-val--red{% endif %}">{{ profitable_months }}/12</div>
       <div class="metric-lbl">Profitable Months</div>
     </div>
   </div>
@@ -286,7 +285,7 @@ tr:hover td{background:var(--surface2);}
 
 <script>
 // Typewriter effect for AI summary
-const summaryText = {{ strategy.summary | tojson }};
+const summaryText = "{{ strategy.summary | tojson }}";
 const el = document.getElementById('aiSummaryText');
 if(el && summaryText) {
   let i = 0;
