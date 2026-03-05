@@ -23,6 +23,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "producttwin-secret-2024")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///users.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SESSION_PERMANENT"] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -208,7 +209,7 @@ def login():
         password = request.form.get("password", "")
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, password):
-            login_user(user, remember=True)
+            login_user(user, remember=False)
             return redirect(url_for("home"))
         flash("Invalid email or password.")
     return render_template("login.html")
